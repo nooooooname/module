@@ -10,6 +10,7 @@ extern struct globalfifo_dev *globalfifo_devp;
 ssize_t globalfifo_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
+	size_t count1, count2;
 	struct globalfifo_dev *dev = filp->private_data;
 	DECLARE_WAITQUEUE(wait, current);
 
@@ -40,18 +41,29 @@ ssize_t globalfifo_read(struct file *filp, char __user *buf, size_t count, loff_
 	if(count > dev->current_len)
 		count = dev->current_len;
 
-	if(copy_to_user(buf, dev->mem, count))
+	if(count > GLOBALFIFO_SIZE - dev->offset)
+	{
+		count1 = GLOBALFIFO_SIZE - dev->offset;
+		count2 = count - count1;
+	}
+	else
+	{
+		count1 = count;
+		count2 = 0;
+	}
+	if(copy_to_user(buf, dev->mem + dev->offset, count1) ||
+			copy_to_user(buf + count1, dev->mem, count2))
 	{
 		ret = -EFAULT;
 	}
 	else
 	{
-		memcpy(dev->mem, dev->mem + count, dev->current_len - count);
+		printk(KERN_NOTICE "从%lu读取了%lu个字节到%#lx，当前长度为%lu\n", dev->offset, count, (unsigned long)buf, dev->current_len - count);
+		dev->offset += count;
+		dev->offset %= GLOBALFIFO_SIZE;
 		dev->current_len -= count;
 		wake_up_interruptible(&dev->w_wait);
 		ret = count;
-
-		printk(KERN_NOTICE "读取了%lu个字节到%#lx，当前长度为%d\n", count, (unsigned long)buf, dev->current_len);
 	}
 
 out:
@@ -65,6 +77,7 @@ out2:
 ssize_t globalfifo_write(struct file *filp, const char __user *buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
+	size_t count1, count2;
 	struct globalfifo_dev *dev = filp->private_data;
 	DECLARE_WAITQUEUE(wait, current);
 
@@ -95,7 +108,18 @@ ssize_t globalfifo_write(struct file *filp, const char __user *buf, size_t count
 	if(count > GLOBALFIFO_SIZE - dev->current_len)
 		count = GLOBALFIFO_SIZE - dev->current_len;
 
-	if(copy_from_user(dev->mem + dev->current_len, buf, count))
+	if(count > GLOBALFIFO_SIZE - (dev->offset + dev->current_len))
+	{
+		count1 = GLOBALFIFO_SIZE - (dev->offset + dev->current_len);
+		count2 = count - count1;
+	}
+	else
+	{
+		count1 = count;
+		count2 = 0;
+	}
+	if(copy_from_user(dev->mem + dev->offset + dev->current_len, buf, count1) ||
+			copy_from_user(dev->mem, buf + count1, count2))
 	{
 		ret = -EFAULT;
 	}
@@ -105,7 +129,7 @@ ssize_t globalfifo_write(struct file *filp, const char __user *buf, size_t count
 		wake_up_interruptible(&dev->r_wait);
 		ret = count;
 
-		printk(KERN_NOTICE "从%#lx写入了%lu个字节，当前长度为%d\n", (unsigned long)buf, count, dev->current_len);
+		printk(KERN_NOTICE "从%#lx写入了%lu个字节到%lu，当前长度为%d\n", (unsigned long)buf, count, dev->offset, dev->current_len);
 	}
 
 out:

@@ -14,6 +14,7 @@ struct globalfifo_dev
 	struct mutex mutex;
 	wait_queue_head_t r_wait;
 	wait_queue_head_t w_wait;
+	size_t offset;
 };
 
 #endif
