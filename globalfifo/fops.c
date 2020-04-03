@@ -2,6 +2,7 @@
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
+#include <linux/poll.h>
 
 #include "globalfifo.h"
 
@@ -190,6 +191,9 @@ long globalfifo_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		case MEM_CLEAR:
 			mutex_lock(&dev->mutex);
 			memset(dev->mem, 0, GLOBALFIFO_SIZE);
+			dev->offset = 0;
+			dev->current_len = 0;
+			wake_up_interruptible(&dev->w_wait);
 			mutex_unlock(&dev->mutex);
 
 			printk(KERN_INFO "globalfifo已清零\n");
@@ -213,4 +217,25 @@ int globalfifo_release(struct inode *inode, struct file *filp)
 {
 	printk(KERN_ALERT "%s：%d:globalfifo_release();\n", __FILE__, __LINE__);	//@
 	return 0;
+}
+
+unsigned int globalfifo_poll(struct file *filp, poll_table *wait)
+{
+	unsigned int mask = 0;
+	struct globalfifo_dev *dev = filp->private_data;
+
+	mutex_lock(&dev->mutex);
+
+	poll_wait(filp, &dev->r_wait, wait);
+	poll_wait(filp, &dev->w_wait, wait);
+
+	if(dev->current_len != 0)
+		mask |= POLLIN | POLLRDNORM;
+
+	if(dev->current_len != GLOBALFIFO_SIZE)
+		mask |= POLLOUT | POLLWRNORM;
+
+	mutex_unlock(&dev->mutex);
+
+	return mask;
 }

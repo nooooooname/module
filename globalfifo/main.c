@@ -3,6 +3,7 @@
 #include <linux/init.h>
 #include <linux/cdev.h>
 #include <linux/slab.h>
+#include <linux/poll.h>
 
 #include "globalfifo.h"
 #include "fops.h"
@@ -20,6 +21,7 @@ static const struct file_operations globalfifo_fops = {
 	.unlocked_ioctl = globalfifo_ioctl,
 	.open = globalfifo_open,
 	.release = globalfifo_release,
+	.poll = globalfifo_poll,
 };
 
 static void globalfifo_setup_cdev(struct globalfifo_dev *dev, int index)
