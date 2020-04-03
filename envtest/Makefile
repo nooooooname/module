@@ -8,3 +8,5 @@ module:
 
 clean:
 	rm -rf *.o *.ko .*.cmd *.mod.c modules.order Module.symvers .tmp_versions
+
+.PHONY: module clean
