@@ -1,9 +1,4 @@
-#include <linux/module.h>
-#include <linux/fs.h>
-#include <linux/cdev.h>
-#include <linux/uaccess.h>
-#include <linux/poll.h>
-
+#include "fops.h"
 #include "globalfifo.h"
 
 extern struct globalfifo_dev *globalfifo_devp;
@@ -60,6 +55,7 @@ ssize_t globalfifo_read(struct file *filp, char __user *buf, size_t count, loff_
 	else
 	{
 		printk(KERN_NOTICE "从%lu读取了%lu个字节到%#lx，当前长度为%lu\n", dev->offset, count, (unsigned long)buf, dev->current_len - count);
+
 		dev->offset += count;
 		dev->offset %= GLOBALFIFO_SIZE;
 		dev->current_len -= count;
@@ -129,6 +125,12 @@ ssize_t globalfifo_write(struct file *filp, const char __user *buf, size_t count
 		dev->current_len += count;
 		wake_up_interruptible(&dev->r_wait);
 		ret = count;
+
+		if(dev->async_queue)
+		{
+			kill_fasync(&dev->async_queue, SIGIO, POLL_IN);
+			printk(KERN_NOTICE "%s: 释放SIGIO\n", __func__);
+		}
 
 		printk(KERN_NOTICE "从%#lx写入了%lu个字节到%lu，当前长度为%d\n", (unsigned long)buf, count, dev->offset, dev->current_len);
 	}
@@ -216,6 +218,8 @@ int globalfifo_open(struct inode *inode, struct file *filp)
 int globalfifo_release(struct inode *inode, struct file *filp)
 {
 	printk(KERN_ALERT "%s：%d:globalfifo_release();\n", __FILE__, __LINE__);	//@
+
+	globalfifo_fasync(-1, filp, 0);
 	return 0;
 }
 
@@ -238,4 +242,13 @@ unsigned int globalfifo_poll(struct file *filp, poll_table *wait)
 	mutex_unlock(&dev->mutex);
 
 	return mask;
+}
+
+int globalfifo_fasync(int fd, struct file *filp, int mode)
+{
+	struct globalfifo_dev *dev = filp->private_data;
+
+	printk(KERN_NOTICE "%s：%s(): %d\n", __FILE__, __func__, __LINE__);	//@
+
+	return fasync_helper(fd, filp, mode, &dev->async_queue);
 }

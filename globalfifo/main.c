@@ -22,6 +22,7 @@ static const struct file_operations globalfifo_fops = {
 	.open = globalfifo_open,
 	.release = globalfifo_release,
 	.poll = globalfifo_poll,
+	.fasync = globalfifo_fasync,
 };
 
 static void globalfifo_setup_cdev(struct globalfifo_dev *dev, int index)
